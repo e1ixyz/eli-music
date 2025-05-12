@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>wii</title>
+  <script src="https://aframe.io/releases/1.4.1/aframe.min.js"></script>
+  <script>
+    // -------- CONFIGURATION --------
+    const galleryPath = 'wii-assets/gallery/';
+    const audioPath   = 'wii-assets/audio/';
+    const artworks = [
+      { id:'A', img:'a.png', position:[-12,1.6,-19], rotation:[0,   0,0] },
+      { id:'B', img:'b.jpg', position:[  0,1.6,-19], rotation:[0,   0,0] },
+      { id:'C', img:'c.png', position:[ 12,1.6,-19], rotation:[0,   0,0] },
+      { id:'D', img:'d.gif', position:[-12,1.6, 19], rotation:[0, 180,0] },
+      { id:'E', img:'e.png', position:[  0,1.6, 19], rotation:[0, 180,0] },
+      { id:'F', img:'f.jpg', position:[ 12,1.6, 19], rotation:[0, 180,0] },
+      { id:'G', img:'g.jpeg', position:[-19,1.6,-12], rotation:[0,  90,0] },
+      { id:'H', img:'h.jpg', position:[-19,1.6,  0], rotation:[0,  90,0] },
+      { id:'I', img:'i.jpg', position:[-19,1.6, 12], rotation:[0,  90,0] },
+      { id:'J', img:'j.jpg', position:[ 19,1.6,-12], rotation:[0, -90,0] },
+      { id:'K', img:'k.png', position:[ 19,1.6,  0], rotation:[0, -90,0] },
+      { id:'L', img:'l.jpeg', position:[ 19,1.6, 12], rotation:[0, -90,0] }
+    ];
+
+    // -------- COMPONENT: fade-on-proximity --------
+    AFRAME.registerComponent('fade-on-proximity', {
+      schema: {
+        radius:    { type: 'number', default: 30 },
+        fadeSpeed: { type: 'number', default: 0.12 }
+      },
+      init() {
+        this.cam       = document.querySelector('[camera]').object3D;
+        this.soundComp = this.el.components.sound;
+        this.currentVol = 0;
+        this.playing   = false;
+        this.el.setAttribute('sound','volume', 0);
+      },
+      tick() {
+        if (!this.soundComp) return;
+        const d      = this.cam.position.distanceTo(this.el.object3D.position);
+        const inside = d < this.data.radius;
+        if (inside) {
+          if (!this.playing) {
+            this.soundComp.stopSound();
+            this.soundComp.playSound();
+            this.playing = true;
+          }
+          this.currentVol += (1 - this.currentVol) * this.data.fadeSpeed;
+        } else if (this.playing) {
+          this.currentVol += (0 - this.currentVol) * this.data.fadeSpeed;
+          if (this.currentVol < 0.01) {
+            this.soundComp.stopSound();
+            this.playing    = false;
+            this.currentVol = 0;
+          }
+        }
+        this.el.setAttribute('sound','volume', this.currentVol);
+      }
+    });
+
+    // -------- COMPONENT: room-boundary --------
+    AFRAME.registerComponent('room-boundary',{ 
+      tick() {
+        const p = this.el.object3D.position;
+        p.x = Math.max(-19, Math.min(19, p.x));
+        p.z = Math.max(-19, Math.min(19, p.z));
+      }
+    });
+
+    // -------- AudioContext unlock --------
+    window.addEventListener('click', () => {
+      const soundSys = document.querySelector('a-scene')?.systems?.sound;
+      if (soundSys?.context?.state === 'suspended') {
+        soundSys.context.resume();
+      }
+    });
+
+    // -------- Utility: check if a file exists via HEAD --------
+    async function fileExists(url) {
+      try {
+        const res = await fetch(url, { method:'HEAD' });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    // -------- Build assets & art planes dynamically --------
+    window.addEventListener('DOMContentLoaded', async () => {
+      const scene  = document.querySelector('a-scene');
+      const assets = document.querySelector('a-assets');
+
+      // inject artwork images
+      for (const art of artworks) {
+        const imgUrl = galleryPath + art.img;
+        if (!(await fileExists(imgUrl))) {
+          console.warn(`Skipping ${art.id}: missing image`);
+          continue;
+        }
+        const imgEl = document.createElement('img');
+        imgEl.id    = `${art.id}-img`;
+        imgEl.src   = imgUrl;
+        assets.appendChild(imgEl);
+
+        const plane = document.createElement('a-plane');
+        plane.setAttribute('position', art.position.join(' '));
+        plane.setAttribute('rotation', art.rotation.join(' '));
+        plane.setAttribute('width',    '4');
+        plane.setAttribute('height',   '4');
+        plane.setAttribute('material', `src: #${art.id}-img`);
+        scene.appendChild(plane);
+      }
+    });
+  </script>
+</head>
+<body>
+  <a-scene>
+    <!-- preload the GIF for walls & ceiling -->
+    <a-assets>
+      <img id="bg-texture" src="wii-assets/bg1.gif">
+      <audio id="A-snd"      src="wii-assets/audio/playing on my wii.wav" preload="auto"></audio>
+    </a-assets>
+
+    <!-- only the central zone remains -->
+    <a-entity
+      sound="src: #A-snd; positional: true; loop: true"
+      fade-on-proximity="radius: 30; fadeSpeed: 0.02"
+      position="0 1.6 0">
+    </a-entity>
+
+    <!-- lighting -->
+    <a-entity light="type: ambient; intensity: 0.4"></a-entity>
+    <a-entity light="type: point; intensity: 1; distance: 50; decay: 2" position="0 5 0"></a-entity>
+
+    <!-- floor is now white -->
+    <a-box position="0 0 0" rotation="-90 0 0"
+           width="40" height="40" depth="0.1" color="#FFF"></a-box>
+
+    <!-- ceiling with repeating GIF -->
+    <a-box position="0 6 0" rotation="90 0 0"
+           width="40" height="40" depth="0.1"
+           material="src: #bg-texture; repeat: 20 20; side: double">
+    </a-box>
+
+    <!-- walls with repeating GIF -->
+    <a-box position=" 0 3 -20"
+           width="40" height="6" depth="0.1"
+           material="src: #bg-texture; repeat: 20 3; side: double">
+    </a-box>
+    <a-box position=" 0 3  20" rotation="0 180 0"
+           width="40" height="6" depth="0.1"
+           material="src: #bg-texture; repeat: 20 3; side: double">
+    </a-box>
+    <a-box position="-20 3   0" rotation="0  90 0"
+           width="40" height="6" depth="0.1"
+           material="src: #bg-texture; repeat: 20 3; side: double">
+    </a-box>
+    <a-box position=" 20 3   0" rotation="0 -90 0"
+           width="40" height="6" depth="0.1"
+           material="src: #bg-texture; repeat: 20 3; side: double">
+    </a-box>
+
+    <!-- camera -->
+    <a-entity camera wasd-controls="acceleration:30"
+              look-controls room-boundary
+              position="0 1.6 0">
+    </a-entity>
+  </a-scene>
+</body>
+</html>
